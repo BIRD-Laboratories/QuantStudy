@@ -1,12 +1,12 @@
 {
-    "size": 100000,
+    "size": 1000,
     "initial_interest_rate": 0.03,
-    "num_rounds": 800,
+    "num_rounds": 80,
     "market_share_limit_fed": 0.1,
     "good_growth_rate": 0.2,
     "quantitative_easing": true,
     "interest_rate_adjustment": true,
-    "recessions": 25,
+    "recessions": 10,
     "bull_markets": 15,
     "recession_duration_min": 2,
     "recession_duration_max": 4,
@@ -24,5 +24,6 @@
     "num_banks": 3,
     "banks_can_sell_bonds": [true, false, true],
     "total_bonds": 3000,
-    "strategy": "StrategyA"
+    "strategy": "StrategyA",
+    "num_companies": 5
 }
