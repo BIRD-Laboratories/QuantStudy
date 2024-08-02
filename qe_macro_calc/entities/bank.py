@@ -25,6 +25,8 @@ class Bank(Entity):
         if self.can_sell_bonds and self.bonds_owned > 0:
             self.bonds_owned -= 1
             self.cash_reserves += bond_price
+            return True
+        return False
 
     def invest_in_bonds(self, bond_price, bond_yield):
         # Example logic for investing in bonds
@@ -32,3 +34,5 @@ class Bank(Entity):
             self.bonds_owned += 1
             self.cash_reserves -= bond_price
             self.cash_reserves += bond_price * bond_yield
+            return True
+        return False

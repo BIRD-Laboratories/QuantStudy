@@ -17,7 +17,7 @@ class BaseStrategy:
 
         # Ensure interest rate does not go below 0.025
         interest_rate = max(interest_rate, 0.025)
-        
+
         return jnp.float32(interest_rate)
 
     def implement_quantitative_easing(self, bond_price, recession_status, banks):
@@ -26,6 +26,10 @@ class BaseStrategy:
             new_bond_price = self.buy_bonds_from_banks(bond_price, banks)
             self.bonds_purchased += len(banks)  # Increment the count of bonds purchased
         else:
+            # Create bonds out of thin air during non-recession times
+            bonds_created = len(banks)  # Example: create one bond per bank
+            self.bonds_purchased += bonds_created
+            logging.info(f"Created {bonds_created} bonds out of thin air.")
             new_bond_price = bond_price * 1.02
             if self.bonds_purchased > 0:
                 self.sell_bonds_to_banks(bond_price, banks)
@@ -34,18 +38,24 @@ class BaseStrategy:
 
     def buy_bonds_from_banks(self, bond_price, banks):
         # Logic for buying bonds from banks during quantitative easing
+        bonds_bought = 0
         for bank in banks:
             if bank.bonds_owned > 0:
-                bank.sell_bonds(bond_price)
+                if bank.sell_bonds(bond_price):
+                    bonds_bought += 1
+        self.bonds_purchased += bonds_bought
         return jnp.float32(bond_price * 0.95)
 
     def sell_bonds_to_banks(self, bond_price, banks):
         # Logic for selling bonds back to banks after a recession
+        bonds_sold = 0
         for bank in banks:
             if self.bonds_purchased > 0:
-                bank.invest_in_bonds(bond_price, 0.02)  # Assuming a bond yield of 2%
-                self.bonds_purchased -= 1
-                logging.info(f"Sold bond back to bank at price: {bond_price}")
+                if bank.invest_in_bonds(bond_price, 0.02):  # Assuming a bond yield of 2%
+                    self.bonds_purchased -= 1
+                    bonds_sold += 1
+                    logging.info(f"Sold bond back to bank at price: {bond_price}")
+        return bonds_sold
 
     def calculate_purchase_probabilities(self, consumer, good_prices, interest_rate):
         # Custom logic for calculating purchase probabilities
