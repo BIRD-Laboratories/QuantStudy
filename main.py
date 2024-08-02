@@ -3,8 +3,8 @@ from qe_macro_calc.simulation.simulation import Simulation
 from qe_macro_calc.utils.data_loader import load_parameters
 from qe_macro_calc.plot import plot_results
 import jax.random as jrandom
-import logging
-logging.basicConfig(level=logging.INFO)
+#import logging
+#logging.basicConfig(level=logging.INFO)
 
 def main():
     parser = argparse.ArgumentParser(description='Run the macroeconomic simulation.')

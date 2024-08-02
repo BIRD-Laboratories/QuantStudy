@@ -88,7 +88,7 @@ class Simulation:
         state[3] = state[3].at[round].set(self.strategy.implement_quantitative_easing(self.params['initial_bond_price'], recession_status, self.banks))
 
         for bank in self.banks:
-            bank.lend_to_consumers(self.consumers, good_prices[0], self.params['margin_requirement'], self.interest_rate)
+            bank.lend_to_consumers(self.consumers, good_prices[0], self.interest_rate)
             bank.invest_in_bonds(self.params['initial_bond_price'], self.params['bond_yield'])
             state[4] = state[4].at[round, self.banks.index(bank)].set(bank.bonds_owned)
             state[5] = state[5].at[round, self.banks.index(bank)].set(bank.cash_reserves)
