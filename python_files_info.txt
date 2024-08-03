@@ -1,0 +1,984 @@
+File path: ./main.py
+Content:
+import pyopencl as cl
+from qe_macro_calc.simulation import Simulation
+import numpy as np
+from qe_macro_calc.utils.data_loader import load_parameters
+
+def main():
+    params = load_parameters("/content/QuantStudy/parameters.json")
+    # Check for OpenCL platforms
+    platforms = cl.get_platforms()
+    if not platforms:
+        print("No OpenCL platforms found. Exiting.")
+        return
+
+    print("Available OpenCL platforms:")
+    for i, platform in enumerate(platforms):
+        print(f"{i}: {platform.name}")
+
+    # Select the first platform
+    selected_platform = platforms[0]
+    print(f"Selected platform: {selected_platform.name}")
+
+    # Get devices for the selected platform
+    devices = selected_platform.get_devices()
+    if not devices:
+        print("No OpenCL devices found. Exiting.")
+        return
+
+    print("Available devices:")
+    for i, device in enumerate(devices):
+        print(f"{i}: {device.name}")
+
+    # Select the first device
+    selected_device = devices[0]
+    print(f"Selected device: {selected_device.name}")
+
+    # Create an OpenCL context
+    ctx = cl.Context([selected_device])
+    print("OpenCL context created successfully.")
+
+    # Create an OpenCL command queue
+    queue = cl.CommandQueue(ctx)
+
+    # Define simulation parameters
+    # Initialize and run the simulation
+    simulation = Simulation(params, ctx, queue)
+    state = simulation.run()
+
+    # Print final state
+    print("Simulation completed successfully.")
+    print(f"Final Good Prices: {state[0][-1]}")
+    print(f"Final Interest Rate: {state[2][-1]:.4f}")
+    print(f"Final Fed bond amount: {state[3][-1]}")
+    print(f"Final Inflation: {state[6][-1]:.4f}")
+    print(f"Final Real GDP: {state[7][-1]:.4f}")
+
+if __name__ == "__main__":
+    main()
+-e 
+---
+
+File path: ./setup.py
+Content:
+from setuptools import setup, find_packages
+
+setup(
+    name='qe_macro_calc',
+    version='0.1',
+    packages=find_packages(),
+    install_requires=[
+        'numpy',
+        'pyopencl',
+    ],
+    extras_require={
+        'mpi': ['mpi4py'],
+    },
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+    ],
+    python_requires='>=3.6',
+)-e 
+---
+
+File path: ./build/lib/qe_macro_calc/metrics/gdp.py
+Content:
+import jax.numpy as jnp
+
+class GDP:
+    def __init__(self, goods_categories):
+        self.goods_categories = goods_categories
+        self.gdp_history = []
+
+    def calculate_gdp(self, good_prices, buyers):
+        gdp = jnp.sum(buyers * good_prices)
+        self.gdp_history.append(gdp)
+        return gdp
+
+    def get_gdp_history(self):
+        return self.gdp_history-e 
+---
+
+File path: ./build/lib/qe_macro_calc/metrics/__init__.py
+Content:
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/__init__.py
+Content:
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/utils/data_loader.py
+Content:
+import json
+
+def load_parameters(file_path):
+    with open(file_path, 'r') as file:
+        params = json.load(file)
+    return params-e 
+---
+
+File path: ./build/lib/qe_macro_calc/utils/__init__.py
+Content:
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/plot.py
+Content:
+import matplotlib.pyplot as plt
+
+def plot_results(results):
+    good_price_history, transaction_history, interest_rate_history, fed_bond_history, bank_bond_history, bank_cash_history, inflation_history = results
+    rounds = len(interest_rate_history)
+
+    fig, axs = plt.subplots(5, 1, figsize=(10, 70))
+
+    axs[0].plot(rounds, good_price_history, marker='o', linestyle='-', color='g')
+    axs[0].set_title('Good Price Over Time')
+    axs[0].set_xlabel('Round')
+    axs[0].set_ylabel('Good Price')
+    axs[0].grid(True)
+
+    axs[1].plot(rounds, interest_rate_history, marker='o', linestyle='-', color='m')
+    axs[1].set_title('Interest Rate Over Time')
+    axs[1].set_xlabel('Round')
+    axs[1].set_ylabel('Interest Rate')
+    axs[1].grid(True)
+
+    axs[2].plot(rounds, fed_bond_history, marker='o', linestyle='-', color='c')
+    axs[2].set_title('Federal Reserve Bond Ownership Over Time')
+    axs[2].set_xlabel('Round')
+    axs[2].set_ylabel('Bonds Owned')
+    axs[2].grid(True)
+
+    axs[3].plot(rounds, inflation_history, marker='o', linestyle='-', color='r')
+    axs[3].set_title('Inflation Over Time')
+    axs[3].set_xlabel('Round')
+    axs[3].set_ylabel('Inflation Rate')
+    axs[3].grid(True)
+
+
+    axs[4].plot(rounds, bank_bond_history, marker='o', linestyle='-', color='b')
+    axs[4].set_title('Bank Bond Ownership Over Time')
+    axs[4].set_xlabel('Round')
+    axs[4].set_ylabel('Bonds Owned')
+    axs[4].grid(True)
+
+
+    plt.tight_layout()
+    plt.savefig("economics.png")
+    plt.show()
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/simulation.py
+Content:
+import numpy as np
+from qe_macro_calc.kernels import Kernels
+from qe_macro_calc.entities.entity import Bank, Consumer, Goods, Company
+from qe_macro_calc.metrics.gdp import GDP
+from qe_macro_calc.utils.data_loader import load_parameters
+
+class Simulation:
+    def __init__(self, params, ctx, queue):
+        self.params = params
+        self.ctx = ctx
+        self.queue = queue
+        self.kernels = Kernels(ctx, queue)
+        self.data_loader = DataLoader(params)
+        self.initialize_entities()
+
+    def initialize_entities(self):
+        self.entities = self.data_loader.load_entities()
+        self.interest_rate = self.params['initial_interest_rate']
+        self.good_price_history = np.zeros((self.params['num_rounds'], len(self.params['goods_categories'])))
+        self.interest_rate_history = np.zeros(self.params['num_rounds'])
+        self.interest_rate_history[0] = self.params['initial_interest_rate']
+        self.transaction_history = np.zeros(3)  # Initialize with fixed length
+        self.inflation_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+        self.composite_inflation_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+        self.real_gdp_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+
+        self.recession_rounds = np.random.choice(np.arange(1, self.params['num_rounds'] - self.params['recession_duration_max']), self.params['recessions'], replace=False)
+        self.recession_durations = np.random.randint(self.params['recession_duration_min'], self.params['recession_duration_max'] + 1, self.params['recessions'])
+
+        self.fed_bond_history = np.zeros(self.params['num_rounds'])
+        self.bank_bond_history = np.zeros((self.params['num_rounds'], len(self.entities['banks'])))
+        self.bank_cash_history = np.zeros((self.params['num_rounds'], len(self.entities['banks'])))
+
+        self.goods = Goods(self.params['goods_categories'], self.params['goods_weights'], self.params['initial_price_level'], self.params)
+        self.gdp = GDP(self.params['goods_categories'])
+
+        # Initialize weights
+        self.weights = np.array(self.params['goods_weights'], dtype=np.float32)
+
+    def run_round(self, round, state):
+        recession_status = np.any(round == self.recession_rounds)
+
+        buy_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
+        sell_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
+
+        self.entities['banks'], self.entities['consumers'], self.goods.prices, self.interest_rate, new_prices, inflation = self.kernels.fused_update(
+            self.entities['banks'], self.entities['consumers'], self.goods.prices, self.interest_rate, buy_amounts, sell_amounts, 0, 0, self.params['interest_rate_adjustment'], recession_status, self.params['initial_bond_price'], self.weights
+        )
+
+        state[0] = self.kernels.update_good_price_history_kernel(self.ctx, self.queue, round, new_prices, state[0])
+        state[2][round] = self.interest_rate
+        state[3][round] = np.sum(self.entities['banks'][:, 3])  # Sum of total_money for banks
+
+        # Update good price history with adjusted prices
+        state[0] = self.kernels.update_good_price_history_kernel(self.ctx, self.queue, round, new_prices, state[0])
+        state[6][round] = inflation
+        state[7][round] = self.gdp.calculate_gdp(new_prices, np.random.binomial(1, 0.5, size=len(self.entities['consumers'])))
+        return state
+
+    def run(self):
+        state = [
+            self.good_price_history,
+            self.transaction_history,
+            self.interest_rate_history,
+            self.fed_bond_history,
+            self.bank_bond_history,
+            self.bank_cash_history,
+            self.inflation_history,
+            self.real_gdp_history
+        ]
+
+        for round in range(1, self.params['num_rounds']):
+            state = self.run_round(round, state)
+
+        print(f"Final Interest Rate: {state[2][self.params['num_rounds'] - 1]:.4f}")
+        print(f"Fed bond amount: {state[3][self.params['num_rounds'] - 1]}")
+        print(f"Final Good Prices: {state[0][self.params['num_rounds'] - 1]}")
+        return state
+
+# Example usage of pmap for parallel execution
+def parallel_simulations(params_list, ctx, queue):
+    simulations = [Simulation(params, ctx, queue) for params in params_list]
+    results = [sim.run() for sim in simulations]
+    return results
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/kernels.py
+Content:
+import pyopencl as cl
+import numpy as np
+
+class Kernels:
+    def __init__(self, ctx, queue):
+        self.ctx = ctx
+        self.queue = queue
+        self.mf = cl.mem_flags
+        self.program = cl.Program(ctx, """
+            __kernel void fused_kernel(
+                __global float *banks,
+                __global float *consumers,
+                __global float *goods,
+                __global float *interest_rate,
+                __global float *buy_amounts,
+                __global float *sell_amounts,
+                __global float *new_prices,
+                __global float *inflation,
+                __global float *gdp_growth,
+                __global float *unemployment_rate,
+                __global float *interest_rate_adjustment,
+                __global int *recession_status,
+                __global float *bond_price,
+                __global float *weights,  // Add weights here
+                int num_banks,
+                int num_consumers,
+                int num_goods
+            ) {
+                int gid = get_global_id(0);
+                if (gid < num_consumers) {
+                    for (int i = 0; i < num_goods; i++) {
+                        float purchase_prob = goods[i] * (1 + *interest_rate);
+                        int buy = (purchase_prob > 0.5) ? 1 : 0;
+                        int sell = (purchase_prob < 0.1) ? 1 : 0;
+                        int bid_ask_spread = buy - sell;
+                        float price_adjustment = 1 + 0.01 * bid_ask_spread / num_consumers;
+                        new_prices[i] = goods[i] * price_adjustment;
+                    }
+                    consumers[gid * 4 + 3] -= buy_amounts[gid];
+                    consumers[gid * 4 + 3] += sell_amounts[gid];
+                } else if (gid < num_consumers + num_banks) {
+                    int bank_id = gid - num_consumers;
+                    float margin_requirement = fmax(0.05 - (*interest_rate * 0.1), 0.01);
+                    if (consumers[gid - num_banks] >= goods[0] * margin_requirement) {
+                        consumers[gid - num_banks] += goods[0] * (1 - margin_requirement);
+                        banks[bank_id * 4 + 3] -= goods[0] * (1 - margin_requirement);
+                    }
+                }
+
+                barrier(CLK_GLOBAL_MEM_FENCE);
+
+                if (gid == 0) {
+                    float total_weight = 0;
+                    float weighted_prices = 0;
+                    for (int i = 0; i < num_goods; i++) {
+                        weighted_prices += goods[i] * weights[i];
+                        total_weight += weights[i];
+                    }
+                    *inflation = weighted_prices / total_weight;
+
+                    if (*inflation <= 0.03 && *interest_rate > 0.025) {
+                        *interest_rate -= 0.01;
+                    }
+                    *interest_rate = fmax(*interest_rate, 0.025);
+
+                    for (int i = 0; i < num_banks; i++) {
+                        if (*recession_status) {
+                            if (banks[i * 4 + 2] > 0) {
+                                banks[i * 4 + 2] -= 1;
+                                banks[i * 4 + 3] += *bond_price;
+                            }
+                        } else {
+                            banks[i * 4 + 2] += 1;
+                            banks[i * 4 + 3] -= *bond_price;
+                        }
+                    }
+                }
+            }
+
+            __kernel void fused_update(
+                __global float *banks,
+                __global float *consumers,
+                __global float *goods,
+                __global float *interest_rate,
+                __global float *buy_amounts,
+                __global float *sell_amounts,
+                __global float *new_prices,
+                __global float *inflation,
+                __global float *gdp_growth,
+                __global float *unemployment_rate,
+                __global float *interest_rate_adjustment,
+                __global int *recession_status,
+                __global float *bond_price,
+                __global float *weights,  // Add weights here
+                int num_banks,
+                int num_consumers,
+                int num_goods
+            ) {
+                int gid = get_global_id(0);
+                if (gid < num_consumers) {
+                    for (int i = 0; i < num_goods; i++) {
+                        float purchase_prob = goods[i] * (1 + *interest_rate);
+                        int buy = (purchase_prob > 0.5) ? 1 : 0;
+                        int sell = (purchase_prob < 0.1) ? 1 : 0;
+                        int bid_ask_spread = buy - sell;
+                        float price_adjustment = 1 + 0.01 * bid_ask_spread / num_consumers;
+                        new_prices[i] = goods[i] * price_adjustment;
+                    }
+                    consumers[gid * 4 + 3] -= buy_amounts[gid];
+                    consumers[gid * 4 + 3] += sell_amounts[gid];
+                } else if (gid < num_consumers + num_banks) {
+                    int bank_id = gid - num_consumers;
+                    float margin_requirement = fmax(0.05 - (*interest_rate * 0.1), 0.01);
+                    if (consumers[gid - num_banks] >= goods[0] * margin_requirement) {
+                        consumers[gid - num_banks] += goods[0] * (1 - margin_requirement);
+                        banks[bank_id * 4 + 3] -= goods[0] * (1 - margin_requirement);
+                    }
+                }
+
+                barrier(CLK_GLOBAL_MEM_FENCE);
+
+                if (gid == 0) {
+                    float total_weight = 0;
+                    float weighted_prices = 0;
+                    for (int i = 0; i < num_goods; i++) {
+                        weighted_prices += goods[i] * weights[i];
+                        total_weight += weights[i];
+                    }
+                    *inflation = weighted_prices / total_weight;
+
+                    if (*inflation <= 0.03 && *interest_rate > 0.025) {
+                        *interest_rate -= 0.01;
+                    }
+                    *interest_rate = fmax(*interest_rate, 0.025);
+
+                    for (int i = 0; i < num_banks; i++) {
+                        if (*recession_status) {
+                            if (banks[i * 4 + 2] > 0) {
+                                banks[i * 4 + 2] -= 1;
+                                banks[i * 4 + 3] += *bond_price;
+                            }
+                        } else {
+                            banks[i * 4 + 2] += 1;
+                            banks[i * 4 + 3] -= *bond_price;
+                        }
+                    }
+                }
+            }
+        """).build()
+
+    def create_buffers(self, *args):
+        buffers = []
+        for arg in args:
+            if isinstance(arg, np.ndarray):
+                buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=arg)
+            else:
+                raise ValueError("Unsupported type")
+            buffers.append(buf)
+        return buffers
+
+    def fused_kernel(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights):
+        num_banks = len(banks)
+        num_consumers = len(consumers)
+        num_goods = len(goods)
+
+        new_prices = np.empty_like(goods)
+        inflation = np.empty(1, dtype=np.float32)
+
+        buffers = self.create_buffers(
+            banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, new_prices, inflation, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights
+        )
+
+        self.program.fused_kernel(self.queue, (num_consumers,), None, *buffers, np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods))
+
+        cl.enqueue_copy(self.queue, new_prices, buffers[6])
+        cl.enqueue_copy(self.queue, inflation, buffers[7])
+
+        return new_prices, inflation[0]
+
+    def fused_update(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights):
+        num_banks = len(banks)
+        num_consumers = len(consumers)
+        num_goods = len(goods)
+
+        new_prices = np.empty_like(goods)
+        inflation = np.empty(1, dtype=np.float32)
+
+        buffers = self.create_buffers(
+            banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, new_prices, inflation, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights
+        )
+
+        self.program.fused_update(self.queue, (num_consumers,), None, *buffers, np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods))
+
+        cl.enqueue_copy(self.queue, banks, buffers[0])
+        cl.enqueue_copy(self.queue, consumers, buffers[1])
+        cl.enqueue_copy(self.queue, goods, buffers[2])
+        cl.enqueue_copy(self.queue, np.array([interest_rate], dtype=np.float32), buffers[3])
+        cl.enqueue_copy(self.queue, new_prices, buffers[6])
+        cl.enqueue_copy(self.queue, inflation, buffers[7])
+
+        return banks, consumers, goods, interest_rate, new_prices, inflation[0]
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/entities/__init__.py
+Content:
+-e 
+---
+
+File path: ./build/lib/qe_macro_calc/entities/entity.py
+Content:
+class Entity:
+    def __init__(self, id, initial_capital):
+        self.id = id
+        self.initial_capital = initial_capital
+        self.income = 0
+        self.outcome = 0
+        self.total_money = initial_capital
+
+    def update_money(self, income, outcome):
+        self.income += income
+        self.outcome += outcome
+        self.total_money += (income - outcome)
+
+class Bank(Entity):
+    def __init__(self, id, initial_capital, max_bid, initial_interest_rate_markup, can_sell_bonds, risk_appetite, strategy):
+        super().__init__(id, initial_capital)
+        self.max_bid = max_bid
+        self.initial_interest_rate_markup = initial_interest_rate_markup
+        self.can_sell_bonds = can_sell_bonds
+        self.risk_appetite = risk_appetite
+        self.strategy = strategy
+        self.bonds_owned = 0
+
+class Consumer(Entity):
+    def __init__(self, id, initial_capital, max_bid, age, salary, fixed_expenses, risk_appetite, strategy):
+        super().__init__(id, initial_capital)
+        self.max_bid = max_bid
+        self.age = age
+        self.salary = salary
+        self.fixed_expenses = fixed_expenses
+        self.risk_appetite = risk_appetite
+        self.strategy = strategy
+
+class Goods:
+    def __init__(self, categories, weights, initial_price_level, parameters):
+        self.categories = categories
+        self.weights = weights
+        self.initial_price_level = initial_price_level
+        self.parameters = parameters
+        self.prices = {cat: weight * initial_price_level for cat, weight in zip(categories, weights)}
+
+class Company(Entity):
+    def __init__(self, id, initial_capital, max_bid):
+        super().__init__(id, initial_capital)
+        self.max_bid = max_bid
+    def __init__(self, name, initial_capital, max_bid):
+        self.name = name
+        self.capital = initial_capital
+        self.max_bid = max_bid
+-e 
+---
+
+File path: ./qe_macro_calc/metrics/gdp.py
+Content:
+import jax.numpy as jnp
+
+class GDP:
+    def __init__(self, goods_categories):
+        self.goods_categories = goods_categories
+        self.gdp_history = []
+
+    def calculate_gdp(self, good_prices, buyers):
+        gdp = jnp.sum(buyers * good_prices)
+        self.gdp_history.append(gdp)
+        return gdp
+
+    def get_gdp_history(self):
+        return self.gdp_history-e 
+---
+
+File path: ./qe_macro_calc/metrics/__init__.py
+Content:
+-e 
+---
+
+File path: ./qe_macro_calc/__init__.py
+Content:
+-e 
+---
+
+File path: ./qe_macro_calc/utils/data_loader.py
+Content:
+import json
+
+def load_parameters(file_path):
+    with open(file_path, 'r') as file:
+        params = json.load(file)
+    return params-e 
+---
+
+File path: ./qe_macro_calc/utils/__init__.py
+Content:
+-e 
+---
+
+File path: ./qe_macro_calc/plot.py
+Content:
+import matplotlib.pyplot as plt
+
+def plot_results(results):
+    good_price_history, transaction_history, interest_rate_history, fed_bond_history, bank_bond_history, bank_cash_history, inflation_history = results
+    rounds = len(interest_rate_history)
+
+    fig, axs = plt.subplots(5, 1, figsize=(10, 70))
+
+    axs[0].plot(rounds, good_price_history, marker='o', linestyle='-', color='g')
+    axs[0].set_title('Good Price Over Time')
+    axs[0].set_xlabel('Round')
+    axs[0].set_ylabel('Good Price')
+    axs[0].grid(True)
+
+    axs[1].plot(rounds, interest_rate_history, marker='o', linestyle='-', color='m')
+    axs[1].set_title('Interest Rate Over Time')
+    axs[1].set_xlabel('Round')
+    axs[1].set_ylabel('Interest Rate')
+    axs[1].grid(True)
+
+    axs[2].plot(rounds, fed_bond_history, marker='o', linestyle='-', color='c')
+    axs[2].set_title('Federal Reserve Bond Ownership Over Time')
+    axs[2].set_xlabel('Round')
+    axs[2].set_ylabel('Bonds Owned')
+    axs[2].grid(True)
+
+    axs[3].plot(rounds, inflation_history, marker='o', linestyle='-', color='r')
+    axs[3].set_title('Inflation Over Time')
+    axs[3].set_xlabel('Round')
+    axs[3].set_ylabel('Inflation Rate')
+    axs[3].grid(True)
+
+
+    axs[4].plot(rounds, bank_bond_history, marker='o', linestyle='-', color='b')
+    axs[4].set_title('Bank Bond Ownership Over Time')
+    axs[4].set_xlabel('Round')
+    axs[4].set_ylabel('Bonds Owned')
+    axs[4].grid(True)
+
+
+    plt.tight_layout()
+    plt.savefig("economics.png")
+    plt.show()
+-e 
+---
+
+File path: ./qe_macro_calc/simulation.py
+Content:
+import numpy as np
+from qe_macro_calc.kernels import Kernels
+from qe_macro_calc.entities.entity import Bank, Consumer, Goods, Company
+from qe_macro_calc.metrics.gdp import GDP
+
+class Simulation:
+    def __init__(self, params, ctx, queue):
+        self.params = params
+        self.ctx = ctx
+        self.queue = queue
+        self.kernels = Kernels(ctx, queue)
+        self.initialize_entities()
+
+    def initialize_entities(self):
+        self.entities = {
+            'banks': [Bank(id=i, initial_capital=1000.0, max_bid=1000.0, initial_interest_rate_markup=0.025) for i in range(self.params['num_banks'])],
+            'consumers': [Consumer(id=i, initial_capital=100.0, max_bid=50.0, age=np.random.randint(self.params['age_range'][0], self.params['age_range'][1]), 
+                                   salary=self.params['salary'] * (1 + np.random.uniform(-0.3, 0.3)), 
+                                   fixed_expenses=self.params['salary'] * 0.72 * (1 + np.random.uniform(-0.3, 0.3)), ) for i in range(self.params['size'])],
+            'companies': [Company(id=i, initial_capital=10000.0) for i in range(self.params['num_companies'])]
+        }
+        
+        self.interest_rate = self.params['initial_interest_rate']
+        self.good_price_history = np.zeros((self.params['num_rounds'], len(self.params['goods_categories'])))
+        self.interest_rate_history = np.zeros(self.params['num_rounds'])
+        self.interest_rate_history[0] = self.params['initial_interest_rate']
+        self.transaction_history = np.zeros(3)  # Initialize with fixed length
+        self.inflation_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+        self.composite_inflation_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+        self.real_gdp_history = np.zeros(self.params['num_rounds'])  # Initialize as a NumPy array
+
+        self.recession_rounds = np.random.choice(np.arange(1, self.params['num_rounds'] - self.params['recession_duration_max']), self.params['recessions'], replace=False)
+        self.recession_durations = np.random.randint(self.params['recession_duration_min'], self.params['recession_duration_max'] + 1, self.params['recessions'])
+
+        self.fed_bond_history = np.zeros(self.params['num_rounds'])
+        self.bank_bond_history = np.zeros((self.params['num_rounds'], len(self.entities['banks'])))
+        self.bank_cash_history = np.zeros((self.params['num_rounds'], len(self.entities['banks'])))
+
+        self.goods = Goods(self.params['goods_categories'], self.params['goods_weights'], self.params['initial_price_level'], self.params)
+        self.gdp = GDP(self.params['goods_categories'])
+
+        # Initialize weights
+        self.weights = np.array(self.params['goods_weights'], dtype=np.float32)
+
+    def convert_entities_to_arrays(self):
+        banks_array = np.array([(bank.id, bank.initial_capital, bank.total_money) for bank in self.entities['banks']], dtype=np.float32)
+        consumers_array = np.array([(consumer.id, consumer.initial_capital, consumer.total_money) for consumer in self.entities['consumers']], dtype=np.float32)
+        goods_array = np.array(list(self.goods.prices.values()), dtype=np.float32)
+        return banks_array, consumers_array, goods_array
+
+    def run_round(self, round, state):
+        recession_status = np.any(round == self.recession_rounds)
+
+        buy_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
+        sell_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
+
+        banks_array, consumers_array, goods_array = self.convert_entities_to_arrays()
+
+        banks_array, consumers_array, goods_array, self.interest_rate, new_prices, inflation = self.kernels.fused_update(
+            banks_array, consumers_array, goods_array, self.interest_rate, buy_amounts, sell_amounts, 0, 0, self.params['interest_rate_adjustment'], recession_status, self.params['initial_bond_price'], self.weights
+        )
+
+        state[0] = self.kernels.update_good_price_history_kernel(self.ctx, self.queue, round, new_prices, state[0])
+        state[2][round] = self.interest_rate
+        state[3][round] = np.sum(banks_array[:, 2])  # Sum of total_money for banks
+
+        # Update good price history with adjusted prices
+        state[0] = self.kernels.update_good_price_history_kernel(self.ctx, self.queue, round, new_prices, state[0])
+        state[6][round] = inflation
+        state[7][round] = self.gdp.calculate_gdp(new_prices, np.random.binomial(1, 0.5, size=len(self.entities['consumers'])))
+        return state
+
+    def run(self):
+        state = [
+            self.good_price_history,
+            self.transaction_history,
+            self.interest_rate_history,
+            self.fed_bond_history,
+            self.bank_bond_history,
+            self.bank_cash_history,
+            self.inflation_history,
+            self.real_gdp_history
+        ]
+
+        for round in range(1, self.params['num_rounds']):
+            state = self.run_round(round, state)
+
+        print(f"Final Interest Rate: {state[2][self.params['num_rounds'] - 1]:.4f}")
+        print(f"Fed bond amount: {state[3][self.params['num_rounds'] - 1]}")
+        print(f"Final Good Prices: {state[0][self.params['num_rounds'] - 1]}")
+        return state
+
+# Example usage of pmap for parallel execution
+def parallel_simulations(params_list, ctx, queue):
+    simulations = [Simulation(params, ctx, queue) for params in params_list]
+    results = [sim.run() for sim in simulations]
+    return results-e 
+---
+
+File path: ./qe_macro_calc/kernels.py
+Content:
+import pyopencl as cl
+import numpy as np
+
+class Kernels:
+    def __init__(self, ctx, queue):
+        self.ctx = ctx
+        self.queue = queue
+        self.mf = cl.mem_flags
+        self.program = cl.Program(ctx, """
+            __kernel void fused_kernel(
+                __global float *banks,
+                __global float *consumers,
+                __global float *goods,
+                __global float *interest_rate,
+                __global float *buy_amounts,
+                __global float *sell_amounts,
+                __global float *new_prices,
+                __global float *inflation,
+                __global float *gdp_growth,
+                __global float *unemployment_rate,
+                __global float *interest_rate_adjustment,
+                __global int *recession_status,
+                __global float *bond_price,
+                __global float *weights,  // Add weights here
+                int num_banks,
+                int num_consumers,
+                int num_goods
+            ) {
+                int gid = get_global_id(0);
+                if (gid < num_consumers) {
+                    for (int i = 0; i < num_goods; i++) {
+                        float purchase_prob = goods[i] * (1 + *interest_rate);
+                        int buy = (purchase_prob > 0.5) ? 1 : 0;
+                        int sell = (purchase_prob < 0.1) ? 1 : 0;
+                        int bid_ask_spread = buy - sell;
+                        float price_adjustment = 1 + 0.01 * bid_ask_spread / num_consumers;
+                        new_prices[i] = goods[i] * price_adjustment;
+                    }
+                    consumers[gid * 4 + 3] -= buy_amounts[gid];
+                    consumers[gid * 4 + 3] += sell_amounts[gid];
+                } else if (gid < num_consumers + num_banks) {
+                    int bank_id = gid - num_consumers;
+                    float margin_requirement = fmax(0.05f - (*interest_rate * 0.1f), 0.01f);  // Use fmax with explicit float literals
+                    if (consumers[gid - num_banks] >= goods[0] * margin_requirement) {
+                        consumers[gid - num_banks] += goods[0] * (1 - margin_requirement);
+                        banks[bank_id * 4 + 3] -= goods[0] * (1 - margin_requirement);
+                    }
+                }
+
+                barrier(CLK_GLOBAL_MEM_FENCE);
+
+                if (gid == 0) {
+                    float total_weight = 0;
+                    float weighted_prices = 0;
+                    for (int i = 0; i < num_goods; i++) {
+                        weighted_prices += goods[i] * weights[i];
+                        total_weight += weights[i];
+                    }
+                    *inflation = weighted_prices / total_weight;
+
+                    if (*inflation <= 0.03f && *interest_rate > 0.025f) {
+                        *interest_rate -= 0.01f;
+                    }
+                    *interest_rate = fmax(*interest_rate, 0.025f);  // Use fmax with explicit float literals
+
+                    for (int i = 0; i < num_banks; i++) {
+                        if (*recession_status) {
+                            if (banks[i * 4 + 2] > 0) {
+                                banks[i * 4 + 2] -= 1;
+                                banks[i * 4 + 3] += *bond_price;
+                            }
+                        } else {
+                            banks[i * 4 + 2] += 1;
+                            banks[i * 4 + 3] -= *bond_price;
+                        }
+                    }
+                }
+            }
+
+            __kernel void fused_update(
+                __global float *banks,
+                __global float *consumers,
+                __global float *goods,
+                __global float *interest_rate,
+                __global float *buy_amounts,
+                __global float *sell_amounts,
+                __global float *new_prices,
+                __global float *inflation,
+                __global float *gdp_growth,
+                __global float *unemployment_rate,
+                __global float *interest_rate_adjustment,
+                __global int *recession_status,
+                __global float *bond_price,
+                __global float *weights,  // Add weights here
+                int num_banks,
+                int num_consumers,
+                int num_goods
+            ) {
+                int gid = get_global_id(0);
+                if (gid < num_consumers) {
+                    for (int i = 0; i < num_goods; i++) {
+                        float purchase_prob = goods[i] * (1 + *interest_rate);
+                        int buy = (purchase_prob > 0.5) ? 1 : 0;
+                        int sell = (purchase_prob < 0.1) ? 1 : 0;
+                        int bid_ask_spread = buy - sell;
+                        float price_adjustment = 1 + 0.01 * bid_ask_spread / num_consumers;
+                        new_prices[i] = goods[i] * price_adjustment;
+                    }
+                    consumers[gid * 4 + 3] -= buy_amounts[gid];
+                    consumers[gid * 4 + 3] += sell_amounts[gid];
+                } else if (gid < num_consumers + num_banks) {
+                    int bank_id = gid - num_consumers;
+                    float margin_requirement = fmax(0.05f - (*interest_rate * 0.1f), 0.01f);  // Use fmax with explicit float literals
+                    if (consumers[gid - num_banks] >= goods[0] * margin_requirement) {
+                        consumers[gid - num_banks] += goods[0] * (1 - margin_requirement);
+                        banks[bank_id * 4 + 3] -= goods[0] * (1 - margin_requirement);
+                    }
+                }
+
+                barrier(CLK_GLOBAL_MEM_FENCE);
+
+                if (gid == 0) {
+                    float total_weight = 0;
+                    float weighted_prices = 0;
+                    for (int i = 0; i < num_goods; i++) {
+                        weighted_prices += goods[i] * weights[i];
+                        total_weight += weights[i];
+                    }
+                    *inflation = weighted_prices / total_weight;
+
+                    if (*inflation <= 0.03f && *interest_rate > 0.025f) {
+                        *interest_rate -= 0.01f;
+                    }
+                    *interest_rate = fmax(*interest_rate, 0.025f);  // Use fmax with explicit float literals
+
+                    for (int i = 0; i < num_banks; i++) {
+                        if (*recession_status) {
+                            if (banks[i * 4 + 2] > 0) {
+                                banks[i * 4 + 2] -= 1;
+                                banks[i * 4 + 3] += *bond_price;
+                            }
+                        } else {
+                            banks[i * 4 + 2] += 1;
+                            banks[i * 4 + 3] -= *bond_price;
+                        }
+                    }
+                }
+            }
+        """).build()
+  
+    def create_buffers(self, *args):
+        buffers = []
+        for arg in args:
+            if isinstance(arg, np.ndarray):
+                buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=arg)
+            else:
+                raise ValueError("Unsupported type")
+            buffers.append(buf)
+        return buffers
+
+    def fused_kernel(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights):
+        num_banks = len(banks)
+        num_consumers = len(consumers)
+        num_goods = len(goods)
+
+        new_prices = np.empty_like(goods)
+        inflation = np.empty(1, dtype=np.float32)
+
+        buffers = self.create_buffers(
+            banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, new_prices, inflation, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights
+        )
+
+        self.program.fused_kernel(self.queue, (num_consumers,), None, *buffers, np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods))
+
+        cl.enqueue_copy(self.queue, new_prices, buffers[6])
+        cl.enqueue_copy(self.queue, inflation, buffers[7])
+
+        return new_prices, inflation[0]
+
+    def fused_update(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights):
+        num_banks = len(banks)
+        num_consumers = len(consumers)
+        num_goods = len(goods)
+
+        new_prices = np.empty_like(goods)
+        inflation = np.empty(1, dtype=np.float32)
+
+        buffers = self.create_buffers(
+            banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, new_prices, inflation, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights
+        )
+
+        self.program.fused_update(self.queue, (num_consumers,), None, *buffers, np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods))
+
+        cl.enqueue_copy(self.queue, banks, buffers[0])
+        cl.enqueue_copy(self.queue, consumers, buffers[1])
+        cl.enqueue_copy(self.queue, goods, buffers[2])
+        cl.enqueue_copy(self.queue, np.array([interest_rate], dtype=np.float32), buffers[3])
+        cl.enqueue_copy(self.queue, new_prices, buffers[6])
+        cl.enqueue_copy(self.queue, inflation, buffers[7])
+
+        return banks, consumers, goods, interest_rate, new_prices, inflation[0]
+-e 
+---
+
+File path: ./qe_macro_calc/entities/__init__.py
+Content:
+-e 
+---
+
+File path: ./qe_macro_calc/entities/entity.py
+Content:
+class Entity:
+    def __init__(self, id, initial_capital):
+        self.id = id
+        self.initial_capital = initial_capital
+        self.income = 0
+        self.outcome = 0
+        self.total_money = initial_capital
+
+    def update_money(self, income, outcome):
+        self.income += income
+        self.outcome += outcome
+        self.total_money += (income - outcome)
+
+class Bank(Entity):
+    def __init__(self, id, initial_capital, max_bid, initial_interest_rate_markup, can_sell_bonds=True):
+        super().__init__(id, initial_capital)
+        self.max_bid = max_bid
+        self.initial_interest_rate_markup = initial_interest_rate_markup
+        self.can_sell_bonds = can_sell_bonds
+        self.bonds_owned = 0
+
+class Consumer(Entity):
+    def __init__(self, id, initial_capital, max_bid, age, salary, fixed_expenses):
+        super().__init__(id, initial_capital)
+        self.max_bid = max_bid
+        self.age = age
+        self.salary = salary
+        self.fixed_expenses = fixed_expenses
+
+class Goods:
+    def __init__(self, categories, weights, initial_price_level, parameters):
+        self.categories = categories
+        self.weights = weights
+        self.initial_price_level = initial_price_level
+        self.parameters = parameters
+        self.prices = {cat: weight * initial_price_level for cat, weight in zip(categories, weights)}
+
+class Company(Entity):
+    def __init__(self, id, initial_capital):
+        self.id = id
+        self.capital = initial_capital-e 
+---
+

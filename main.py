@@ -1,8 +1,20 @@
+import argparse
 import pyopencl as cl
 from qe_macro_calc.simulation import Simulation
+from qe_macro_calc.utils.data_loader import DataLoader
 import numpy as np
+import matplotlib.pyplot as plt
 
 def main():
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Run the economic simulation.')
+    parser.add_argument('--params_dir', type=str, default='parameters.json', help='Directory to load parameters from')
+    args = parser.parse_args()
+
+    # Load parameters from the specified directory
+    data_loader = DataLoader(args.params_dir)
+    params = data_loader.params
+
     # Check for OpenCL platforms
     platforms = cl.get_platforms()
     if not platforms:
@@ -38,28 +50,8 @@ def main():
     # Create an OpenCL command queue
     queue = cl.CommandQueue(ctx)
 
-    # Define simulation parameters
-    params = {
-        'num_rounds': 100,
-        'goods_categories': ['Food', 'Clothing', 'Electronics'],
-        'goods_weights': [0.4, 0.3, 0.3],
-        'initial_price_level': 100.0,
-        'initial_interest_rate': 0.05,
-        'interest_rate_adjustment': 0.01,
-        'initial_bond_price': 1000.0,
-        'bond_yield': 0.03,
-        'num_banks': 5,
-        'num_consumers': 100,
-        'num_companies': 10,
-        'recessions': 2,
-        'recession_duration_min': 5,
-        'recession_duration_max': 10,
-        'size': 100,
-        'banks_can_sell_bonds': [True] * 5
-    }
-
     # Initialize and run the simulation
-    simulation = Simulation(params, ctx, queue)
+    simulation = Simulation(args.params_dir, ctx, queue)
     state = simulation.run()
 
     # Print final state
@@ -69,6 +61,79 @@ def main():
     print(f"Final Fed bond amount: {state[3][-1]}")
     print(f"Final Inflation: {state[6][-1]:.4f}")
     print(f"Final Real GDP: {state[7][-1]:.4f}")
+    print(f"Final Money Supply: {state[8][-1]:.4f}")
+    print(f"Final Salary: {state[9][-1]:.4f}")
+    print(f"Final Affordability Ratio: {state[15][-1]:.4f}")
+
+    # Plotting
+    num_rounds = params['num_rounds']
+    rounds = np.arange(num_rounds)
+
+    plt.figure(figsize=(15, 20))
+
+    # Plot Good Prices Composite Index
+    plt.subplot(4, 2, 1)
+    composite_index = np.zeros(num_rounds)
+    for round in range(num_rounds):
+        composite_index[round] = np.sum(state[0][round] * simulation.weights)
+    plt.plot(rounds, composite_index, label='Composite Index')
+    plt.title('Good Prices Composite Index Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Composite Index')
+    plt.legend()
+
+    # Plot Interest Rate
+    plt.subplot(4, 2, 2)
+    plt.plot(rounds, state[2])
+    plt.title('Interest Rate Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Interest Rate')
+
+    # Plot Fed Bond Amount
+    plt.subplot(4, 2, 3)
+    plt.plot(rounds, state[3])
+    plt.title('Fed Bond Amount Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Bond Amount')
+
+    # Plot Inflation
+    plt.subplot(4, 2, 4)
+    plt.plot(rounds, state[6])
+    plt.title('Inflation Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Inflation')
+
+    # Plot Real GDP
+    plt.subplot(4, 2, 5)
+    plt.plot(rounds, state[7])
+    plt.title('Real GDP Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Real GDP')
+
+    # Plot Money Supply
+    plt.subplot(4, 2, 6)
+    plt.plot(rounds, state[8])
+    plt.title('Money Supply Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Money Supply')
+
+    # Plot Salaries
+    plt.subplot(4, 2, 7)
+    plt.plot(rounds, state[9])
+    plt.title('Salaries Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Salary')
+
+    # Plot Affordability Ratio
+    plt.subplot(4, 2, 8)
+    plt.plot(rounds, state[15])
+    plt.title('Affordability Ratio Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Affordability Ratio')
+
+    plt.tight_layout()
+    plt.savefig("economics.png")
+    plt.show()
 
 if __name__ == "__main__":
     main()
