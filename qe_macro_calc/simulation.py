@@ -1,9 +1,8 @@
 import numpy as np
-from mpi4py import MPI
 from qe_macro_calc.kernels import Kernels
 from qe_macro_calc.entities.entity import Bank, Consumer, Goods, Company
 from qe_macro_calc.metrics.gdp import GDP
-from qe_macro_calc.data_loader import DataLoader
+from qe_macro_calc.utils.data_loader import load_parameters
 
 class Simulation:
     def __init__(self, params, ctx, queue):

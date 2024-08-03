@@ -1,9 +1,8 @@
 import matplotlib.pyplot as plt
-import jax.numpy as jnp
 
 def plot_results(results):
     good_price_history, transaction_history, interest_rate_history, fed_bond_history, bank_bond_history, bank_cash_history, inflation_history = results
-    rounds = jnp.arange(len(interest_rate_history))
+    rounds = len(interest_rate_history)
 
     fig, axs = plt.subplots(5, 1, figsize=(10, 70))
 
