@@ -56,14 +56,8 @@ def main():
 
     # Print final state
     print("Simulation completed successfully.")
-    print(f"Final Good Prices: {state[0][-1]}")
-    print(f"Final Interest Rate: {state[2][-1]:.4f}")
-    print(f"Final Fed bond amount: {state[3][-1]}")
-    print(f"Final Inflation: {state[6][-1]:.4f}")
-    print(f"Final Real GDP: {state[7][-1]:.4f}")
-    print(f"Final Money Supply: {state[8][-1]:.4f}")
-    print(f"Final Salary: {state[9][-1]:.4f}")
-    print(f"Final Affordability Ratio: {state[15][-1]:.4f}")
+    print(f"Final Interest Rate: {state[0][-1]:.4f}")
+    print(f"Final Affordability Ratio: {state[12][-1]:.4f}")
 
     # Plotting
     num_rounds = params['num_rounds']
@@ -71,62 +65,35 @@ def main():
 
     plt.figure(figsize=(15, 20))
 
-    # Plot Good Prices Composite Index
-    plt.subplot(4, 2, 1)
-    composite_index = np.zeros(num_rounds)
-    for round in range(num_rounds):
-        composite_index[round] = np.sum(state[0][round] * simulation.weights)
-    plt.plot(rounds, composite_index, label='Composite Index')
-    plt.title('Good Prices Composite Index Over Time')
-    plt.xlabel('Round')
-    plt.ylabel('Composite Index')
-    plt.legend()
-
+ 
+    print(rounds)
+    print(state[0])
     # Plot Interest Rate
     plt.subplot(4, 2, 2)
-    plt.plot(rounds, state[2])
+    plt.plot(rounds[-1], state[0][-1])
     plt.title('Interest Rate Over Time')
     plt.xlabel('Round')
     plt.ylabel('Interest Rate')
 
-    # Plot Fed Bond Amount
-    plt.subplot(4, 2, 3)
-    plt.plot(rounds, state[3])
-    plt.title('Fed Bond Amount Over Time')
-    plt.xlabel('Round')
-    plt.ylabel('Bond Amount')
-
-    # Plot Inflation
-    plt.subplot(4, 2, 4)
-    plt.plot(rounds, state[6])
-    plt.title('Inflation Over Time')
-    plt.xlabel('Round')
-    plt.ylabel('Inflation')
-
-    # Plot Real GDP
-    plt.subplot(4, 2, 5)
-    plt.plot(rounds, state[7])
-    plt.title('Real GDP Over Time')
-    plt.xlabel('Round')
-    plt.ylabel('Real GDP')
 
     # Plot Money Supply
     plt.subplot(4, 2, 6)
-    plt.plot(rounds, state[8])
+    plt.plot(rounds[-1], state[3][0][-1])
     plt.title('Money Supply Over Time')
     plt.xlabel('Round')
     plt.ylabel('Money Supply')
 
     # Plot Salaries
     plt.subplot(4, 2, 7)
-    plt.plot(rounds, state[9])
+    print(state[4])
+    plt.plot(rounds[-1], state[4][-1])
     plt.title('Salaries Over Time')
     plt.xlabel('Round')
     plt.ylabel('Salary')
 
     # Plot Affordability Ratio
     plt.subplot(4, 2, 8)
-    plt.plot(rounds, state[15])
+    plt.plot(rounds[-1], state[10][-1])
     plt.title('Affordability Ratio Over Time')
     plt.xlabel('Round')
     plt.ylabel('Affordability Ratio')

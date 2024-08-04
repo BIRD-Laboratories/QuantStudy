@@ -21,15 +21,17 @@ class Kernels:
                 __global float *interest_rate_adjustment,
                 __global int *recession_status,
                 __global float *bond_price,
-                __global float *bank_bond_buying,
-                __global float *bank_bond_selling,
-                __global float *weights,
                 __global float *money_supply,
                 __global float *salary,
+                __global float *bank_bond_buying,
+                __global float *bank_bond_selling,
+                __global float *updated_money_supply,
+                __global float *updated_salary,
                 __global float *affordability_ratio,
                 int num_banks,
                 int num_consumers,
-                int num_goods
+                int num_goods,
+                float money_supply_increment
             ) {
                 int gid = get_global_id(0);
                 if (gid < num_consumers) {
@@ -45,7 +47,8 @@ class Kernels:
                     consumers[gid * 4 + 3] += sell_amounts[gid];
                 } else if (gid < num_consumers + num_banks) {
                     int bank_id = gid - num_consumers;
-                    float margin_requirement = (0.05 - (*interest_rate * 0.1) > 0.01) ? 0.05 - (*interest_rate * 0.1) : 0.01;
+                    float margin_requirement = 0.05 - (*interest_rate * 0.1);
+                    margin_requirement = (margin_requirement > 0.01) ? margin_requirement : 0.01;
                     if (consumers[gid - num_banks] >= goods[0] * margin_requirement) {
                         consumers[gid - num_banks] += goods[0] * (1 - margin_requirement);
                         banks[bank_id * 4 + 3] -= goods[0] * (1 - margin_requirement);
@@ -55,106 +58,104 @@ class Kernels:
                 barrier(CLK_GLOBAL_MEM_FENCE);
 
                 if (gid == 0) {
-                    float total_weight = 0;
-                    float weighted_prices = 0;
+                    float total_prices = 0;
                     for (int i = 0; i < num_goods; i++) {
-                        weighted_prices += goods[i] * weights[i];
-                        total_weight += weights[i];
+                        total_prices += new_prices[i];
                     }
-                    *inflation = weighted_prices / total_weight;
-
-                    // Increase inflation proportional to money supply
-                    *inflation *= (1 + *money_supply);
+                    float average_price = total_prices / num_goods;
+                    *affordability_ratio = *money_supply / (*salary * num_consumers);
+                    *inflation = average_price * *affordability_ratio;
 
                     if (*inflation <= 0.03 && *interest_rate > 0.025) {
                         *interest_rate -= 0.01;
                     }
                     *interest_rate = (*interest_rate > 0.025) ? *interest_rate : 0.025;
 
+                    float total_bond_buying = 0;
+                    float total_bond_selling = 0;
                     for (int i = 0; i < num_banks; i++) {
                         if (*recession_status) {
                             if (banks[i * 4 + 2] > 0) {
                                 banks[i * 4 + 2] -= 1;
                                 banks[i * 4 + 3] += *bond_price;
-                                bank_bond_buying[i] += 1;
+                                total_bond_buying += 1;
                             }
                         } else {
                             banks[i * 4 + 2] += 1;
                             banks[i * 4 + 3] -= *bond_price;
-                            bank_bond_selling[i] += 1;
+                            total_bond_selling += 1;
                         }
                     }
+                    *bank_bond_buying = total_bond_buying;
+                    *bank_bond_selling = total_bond_selling;
 
-                    // QE during low growth periods
-                    if (*gdp_growth < 0.01) {
-                        *money_supply += 0.01;
-                    }
-
-                    // Check price-to-income ratio and trigger recession if necessary
-                    float average_income = 0;
-                    for (int i = 0; i < num_consumers; i++) {
-                        average_income += consumers[i * 4 + 3];
-                    }
-                    average_income /= num_consumers;
-
-                    float average_price = 0;
-                    for (int i = 0; i < num_goods; i++) {
-                        average_price += new_prices[i];
-                    }
-                    average_price /= num_goods;
-
-                    *affordability_ratio = average_income / average_price;
-
-                    if (average_price / average_income > 1.5) {
-                        *recession_status = 1;
-                    } else {
-                        *recession_status = 0;
-                    }
-
-                    // Update goods prices
-                    for (int i = 0; i < num_goods; i++) {
-                        goods[i] = new_prices[i];
-                    }
-
-                    // Update bond price
-                    *bond_price *= (1 + *interest_rate);
+                    *updated_money_supply = *money_supply + total_bond_buying * *bond_price - total_bond_selling * *bond_price + money_supply_increment;
+                    *updated_salary = *salary * (1 + *inflation);
                 }
             }
         """).build()
 
-    def create_buffers(self, *args):
-        buffers = []
-        for arg in args:
-            if isinstance(arg, np.ndarray):
-                buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=arg)
-            else:
-                raise ValueError("Unsupported type")
-            buffers.append(buf)
-        return buffers
-
-    def fused_kernel(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, weights, money_supply, salary):
+    def fused_kernel(self, banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, money_supply, salary, money_supply_increment):
         num_banks = len(banks)
         num_consumers = len(consumers)
         num_goods = len(goods)
 
-        new_prices = np.empty(num_goods, dtype=np.float32)
+        new_prices = np.empty_like(goods)
         inflation = np.empty(1, dtype=np.float32)
-        bank_bond_buying = np.zeros(num_banks, dtype=np.float32)
-        bank_bond_selling = np.zeros(num_banks, dtype=np.float32)
+        bank_bond_buying = np.empty(1, dtype=np.float32)
+        bank_bond_selling = np.empty(1, dtype=np.float32)
+        updated_money_supply = np.empty(1, dtype=np.float32)
+        updated_salary = np.empty(1, dtype=np.float32)
         affordability_ratio = np.empty(1, dtype=np.float32)
 
-        buffers = self.create_buffers(
-            banks, consumers, goods, interest_rate, buy_amounts, sell_amounts, new_prices, inflation, gdp_growth, unemployment_rate, interest_rate_adjustment, recession_status, bond_price, bank_bond_buying, bank_bond_selling, weights, money_supply, salary, affordability_ratio
-        )
+        # Manually create buffers
+        banks_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=banks)
+        consumers_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=consumers)
+        goods_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=goods)
+        interest_rate_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        buy_amounts_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=buy_amounts)
+        sell_amounts_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=sell_amounts)
+        new_prices_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=new_prices)
+        inflation_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        gdp_growth_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=gdp_growth)
+        unemployment_rate_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE | self.mf.COPY_HOST_PTR, hostbuf=unemployment_rate)
+        interest_rate_adjustment_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        recession_status_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        bond_price_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        money_supply_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        salary_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        bank_bond_buying_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        bank_bond_selling_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        updated_money_supply_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        updated_salary_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
+        affordability_ratio_buf = cl.Buffer(self.ctx, self.mf.READ_WRITE, size=4)
 
-        self.program.fused_kernel(self.queue, (num_consumers,), None, *buffers, np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods))
+        # Copy data to buffers
+        cl.enqueue_copy(self.queue, interest_rate_buf, np.array([interest_rate], dtype=np.float32))
+        cl.enqueue_copy(self.queue, interest_rate_adjustment_buf, np.array([interest_rate_adjustment], dtype=np.float32))
+        cl.enqueue_copy(self.queue, recession_status_buf, np.array([recession_status], dtype=np.int32))
+        cl.enqueue_copy(self.queue, bond_price_buf, np.array([bond_price], dtype=np.float32))
+        cl.enqueue_copy(self.queue, money_supply_buf, np.array([money_supply], dtype=np.float32))
+        cl.enqueue_copy(self.queue, salary_buf, np.array([salary], dtype=np.float32))
 
-        cl.enqueue_copy(self.queue, new_prices, buffers[6])
-        cl.enqueue_copy(self.queue, inflation, buffers[7])
-        cl.enqueue_copy(self.queue, bank_bond_buying, buffers[14])
-        cl.enqueue_copy(self.queue, bank_bond_selling, buffers[15])
-        cl.enqueue_copy(self.queue, money_supply, buffers[16])
-        cl.enqueue_copy(self.queue, salary, buffers[17])
-        cl.enqueue_copy(self.queue, affordability_ratio, buffers[18])
+        self.program.fused_kernel(self.queue, (num_consumers + num_banks,), None,
+                                  banks_buf, consumers_buf, goods_buf, interest_rate_buf, buy_amounts_buf, sell_amounts_buf,
+                                  new_prices_buf, inflation_buf, gdp_growth_buf, unemployment_rate_buf, interest_rate_adjustment_buf,
+                                  recession_status_buf, bond_price_buf, money_supply_buf, salary_buf, bank_bond_buying_buf,
+                                  bank_bond_selling_buf, updated_money_supply_buf, updated_salary_buf, affordability_ratio_buf,
+                                  np.int32(num_banks), np.int32(num_consumers), np.int32(num_goods), np.float32(money_supply_increment))
 
-        return new_prices, inflation[0], bank_bond_buying, bank_bond_selling, money_supply[0], salary[0], affordability_ratio[0]
+        # Copy data back from buffers
+        cl.enqueue_copy(self.queue, banks, banks_buf)
+        cl.enqueue_copy(self.queue, consumers, consumers_buf)
+        cl.enqueue_copy(self.queue, goods, goods_buf)
+        cl.enqueue_copy(self.queue, np.array([interest_rate], dtype=np.float32), interest_rate_buf)
+        cl.enqueue_copy(self.queue, new_prices, new_prices_buf)
+        cl.enqueue_copy(self.queue, inflation, inflation_buf)
+        cl.enqueue_copy(self.queue, bank_bond_buying, bank_bond_buying_buf)
+        cl.enqueue_copy(self.queue, bank_bond_selling, bank_bond_selling_buf)
+        cl.enqueue_copy(self.queue, updated_money_supply, updated_money_supply_buf)
+        cl.enqueue_copy(self.queue, updated_salary, updated_salary_buf)
+        cl.enqueue_copy(self.queue, affordability_ratio, affordability_ratio_buf)
+
+        return banks, consumers, goods, interest_rate, inflation[0], bank_bond_buying[0], bank_bond_selling[0], updated_money_supply[0], updated_salary[0], affordability_ratio[0]
