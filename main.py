@@ -56,8 +56,8 @@ def main():
 
     # Print final state
     print("Simulation completed successfully.")
-    print(f"Final Interest Rate: {state[0][-1]:.4f}")
-    print(f"Final Affordability Ratio: {state[12][-1]:.4f}")
+    print(f"Final Interest Rate: {state['interest_rate'][-1]:.4f}")
+    print(f"Final Affordability Ratio: {state['affordability_ratio'][-1]:.4f}")
 
     # Plotting
     num_rounds = params['num_rounds']
@@ -65,38 +65,54 @@ def main():
 
     plt.figure(figsize=(15, 20))
 
- 
-    print(rounds)
-    print(state[0])
     # Plot Interest Rate
-    plt.subplot(4, 2, 2)
-    plt.plot(rounds[-1], state[0][-1])
+    plt.subplot(4, 2, 1)
+    plt.plot(rounds, state['interest_rate'])
     plt.title('Interest Rate Over Time')
     plt.xlabel('Round')
     plt.ylabel('Interest Rate')
 
-
     # Plot Money Supply
-    plt.subplot(4, 2, 6)
-    plt.plot(rounds[-1], state[3][0][-1])
+    plt.subplot(4, 2, 2)
+    plt.plot(rounds, state['money_supply'])
     plt.title('Money Supply Over Time')
     plt.xlabel('Round')
     plt.ylabel('Money Supply')
 
     # Plot Salaries
-    plt.subplot(4, 2, 7)
-    print(state[4])
-    plt.plot(rounds[-1], state[4][-1])
+    plt.subplot(4, 2, 3)
+    plt.plot(rounds, state['salary'])
     plt.title('Salaries Over Time')
     plt.xlabel('Round')
     plt.ylabel('Salary')
 
     # Plot Affordability Ratio
-    plt.subplot(4, 2, 8)
-    plt.plot(rounds[-1], state[10][-1])
+    plt.subplot(4, 2, 4)
+    plt.plot(rounds, state['affordability_ratio'])
     plt.title('Affordability Ratio Over Time')
     plt.xlabel('Round')
     plt.ylabel('Affordability Ratio')
+
+    # Plot Inflation
+    plt.subplot(4, 2, 5)
+    plt.plot(rounds, state['inflation'])
+    plt.title('Inflation Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Inflation')
+
+    # Plot Bank Bond Buying
+    plt.subplot(4, 2, 6)
+    plt.plot(rounds, state['bank_bond_buying'])
+    plt.title('Bank Bond Buying Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Bank Bond Buying')
+
+    # Plot Bank Bond Selling
+    plt.subplot(4, 2, 7)
+    plt.plot(rounds, state['bank_bond_selling'])
+    plt.title('Bank Bond Selling Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('Bank Bond Selling')
 
     plt.tight_layout()
     plt.savefig("economics.png")
