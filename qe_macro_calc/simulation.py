@@ -1,90 +1,90 @@
 import numpy as np
-from qe_macro_calc.utils.data_loader import DataLoader
 from qe_macro_calc.kernels import Kernels
+from qe_macro_calc.metrics.gdp import GDP
+from qe_macro_calc.utils.data_loader import DataLoader
 
 class Simulation:
     def __init__(self, params_file, ctx, queue):
-        self.data_loader = DataLoader(params_file)
-        self.params = self.data_loader.params
+        self.params_file = params_file
         self.ctx = ctx
         self.queue = queue
-        self.kernels = Kernels(self.ctx, self.queue)
+        self.kernels = Kernels(ctx, queue)
+        self.data_loader = DataLoader(params_file)
+        self.params = self.data_loader.params
         self.initialize_entities()
-        self.initialize_state()
 
     def initialize_entities(self):
+        self.money_supply = self.params['initial_money_supply']
+        self.salary = self.params['salary']
         self.entities = self.data_loader.load_entities()
+        self.interest_rate = self.params['initial_interest_rate']
+        self.good_price_history = []
+        self.interest_rate_history = []
+        self.inflation_history = []
+        self.gdp = GDP(self.params['goods_categories'])
 
-    def initialize_state(self):
-        num_rounds = self.params['num_rounds']
-        num_goods = len(self.entities['goods'])
-        self.state = {
-            'interest_rate': np.zeros(num_rounds, dtype=np.float32),
-            'total_bank_capital': np.zeros(num_rounds, dtype=np.float32),
-            'inflation': np.zeros(num_rounds, dtype=np.float32),
-            'money_supply': np.zeros(num_rounds, dtype=np.float32),
-            'salary': np.zeros(num_rounds, dtype=np.float32),
-            'gdp_growth': np.zeros(num_rounds, dtype=np.float32),
-            'unemployment_rate': np.zeros(num_rounds, dtype=np.float32),
-            'interest_rate_adjustment': np.zeros(num_rounds, dtype=np.float32),
-            'recession_status': np.zeros(num_rounds, dtype=np.int32),
-            'bond_price': np.zeros(num_rounds, dtype=np.float32),
-            'affordability_ratio': np.zeros(num_rounds, dtype=np.float32),
-            'bank_bond_buying': np.zeros(num_rounds, dtype=np.float32),
-            'bank_bond_selling': np.zeros(num_rounds, dtype=np.float32),
-            'historical_inflation': np.zeros(num_rounds, dtype=np.float32),
-            'previous_prices': np.array(self.entities['goods'], dtype=np.float32)  # Initialize with initial prices
-        }
-        self.state['interest_rate'][0] = self.params['initial_interest_rate']
-        self.state['money_supply'][0] = self.params['initial_money_supply']
-        self.state['salary'][0] = self.params['salary']
-        self.state['bond_price'][0] = self.params['initial_bond_price']
-        self.state['interest_rate_adjustment'][0] = self.params['interest_rate_adjustment']
+        # Ensure weights is a numpy array
+        self.weights = np.array([good['weight'] for good in self.params['goods']], dtype=np.float32)
 
-    def run(self):
-        num_rounds = self.params['num_rounds']
-        for round in range(1, num_rounds):
-            self.run_round(round)
-        return self.state
-
-    def run_round(self, round):
-        recession_status = False
-
+    def run_round(self, round, state):
         buy_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
         sell_amounts = np.zeros(len(self.entities['consumers']), dtype=np.float32)
 
         banks_array, consumers_array, goods_array = self.entities['banks'], self.entities['consumers'], self.entities['goods']
 
-        interest_rate = self.state['interest_rate'][round - 1]
-        money_supply = self.state['money_supply'][round - 1]
-        salary = self.state['salary'][round - 1]
-        bond_price = self.state['bond_price'][round - 1]
-        historical_inflation = self.state['historical_inflation']
-        interest_rate_adjustment = self.state['interest_rate_adjustment'][round - 1]
-        previous_prices = self.state['previous_prices']
+        # Convert scalar values to numpy arrays
+        interest_rate_array = np.array([self.interest_rate], dtype=np.float32)
+        gdp_growth_array = np.array([state[6][round-1] if round > 0 else 0], dtype=np.float32)  # GDP Growth from previous round
+        unemployment_rate_array = np.array([state[7][round-1] if round > 0 else 0], dtype=np.float32)  # Unemployment Rate from previous round
+        interest_rate_adjustment_array = np.array([self.params['interest_rate_adjustment']], dtype=np.float32)
+        bond_price_array = np.array([state[10][round-1] if round > 0 else self.params['initial_bond_price']], dtype=np.float32)  # Bond Price from previous round
+        money_supply_array = np.array([self.money_supply], dtype=np.float32)
+        salary_array = np.array([self.salary], dtype=np.float32)
 
-        result = self.kernels.fused_kernel(
-            banks_array, consumers_array, goods_array, interest_rate, buy_amounts, sell_amounts,
-            self.state['gdp_growth'][round - 1], self.state['unemployment_rate'][round - 1],
-            interest_rate_adjustment, recession_status, bond_price, money_supply, salary, 10000, historical_inflation, previous_prices, round
+        # Get last round's prices
+        last_prices = self.good_price_history[round - 1] if round > 0 else np.array([good['initial_price'] for good in self.params['goods']], dtype=np.float32)
+
+        # Call fused_kernel for interest rate adjustments and QE
+        banks, consumers, goods, interest_rate, inflation, bank_bond_buying, bank_bond_selling, updated_money_supply, updated_salary = self.kernels.fused_kernel(
+            banks_array, consumers_array, goods_array, interest_rate_array, buy_amounts, sell_amounts, gdp_growth_array, unemployment_rate_array, interest_rate_adjustment_array, bond_price_array, money_supply_array, salary_array, 10000, last_prices
         )
 
-        self.state['interest_rate'][round] = result[3]
-        self.state['total_bank_capital'][round] = np.sum(result[0][:, 2])
-        self.state['inflation'][round] = result[4]
-        self.state['money_supply'][round] = result[7]
-        self.state['salary'][round] = result[8]  # Update salary based on inflation
-        self.state['gdp_growth'][round] = 0  # Placeholder
-        self.state['unemployment_rate'][round] = 0  # Placeholder
-        self.state['interest_rate_adjustment'][round] = interest_rate_adjustment
-        self.state['recession_status'][round] = recession_status
-        self.state['bond_price'][round] = bond_price
-        self.state['affordability_ratio'][round] = result[9]
-        self.state['bank_bond_buying'][round] = result[5]
-        self.state['bank_bond_selling'][round] = result[6]
-        self.state['historical_inflation'] = result[10]
-        self.state['previous_prices'] = result[11]
+        # Update state with new prices and inflation
+        state[0].append(interest_rate)  # Update interest rate
+        state[1].append(np.sum(self.entities['banks'][:, 2]))  # Sum of total_money for banks
+        state[2].append(inflation)  # Update inflation
+        state[3].append(updated_money_supply)  # Update money supply
+        state[4].append(updated_salary)  # Update salary
+        state[5].append(0)  # Assuming gdp_growth is 0 for now
+        state[6].append(0)  # Assuming unemployment_rate is 0 for now
+        state[7].append(self.params['interest_rate_adjustment'])
+        state[8].append(bond_price_array[0])  # Update bond price
+        state[9].append(bank_bond_buying)  # Update bank bond buying
+        state[10].append(bank_bond_selling)  # Update bank bond selling
 
-        self.entities['banks'] = result[0]
-        self.entities['consumers'] = result[1]
-        self.entities['goods'] = result[2]
+        # Update good price history
+        self.good_price_history.append(goods_array[:, 2])
+
+        return state
+
+    def run(self):
+        num_rounds = self.params['num_rounds']
+        self.money_supply = self.params['initial_money_supply']
+        state = [
+            [],  # Interest Rate
+            [],  # Sum of total_money for banks
+            [],  # Inflation
+            [],  # Good Prices
+            [],  # Money Supply
+            [],  # Salary
+            [],  # GDP Growth
+            [],  # Unemployment Rate
+            [],  # Interest Rate Adjustment
+            [],  # Bond Price
+            [],  # Bank Bond Buying
+            [],  # Bank Bond Selling
+        ]
+        for round in range(num_rounds):
+            state = self.run_round(round, state)
+
+        return state
