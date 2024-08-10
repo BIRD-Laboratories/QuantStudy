@@ -4,11 +4,9 @@ from qe_macro_calc.metrics.gdp import GDP
 from qe_macro_calc.utils.data_loader import DataLoader
 
 class Simulation:
-    def __init__(self, params_file, ctx, queue):
+    def __init__(self, params_file):
         self.params_file = params_file
-        self.ctx = ctx
-        self.queue = queue
-        self.kernels = Kernels(ctx, queue)
+        self.kernels = Kernels()
         self.data_loader = DataLoader(params_file)
         self.params = self.data_loader.params
         self.initialize_entities()

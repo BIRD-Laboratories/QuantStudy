@@ -1,9 +1,8 @@
 import argparse
-import pyopencl as cl
-from qe_macro_calc.simulation import Simulation
-from qe_macro_calc.utils.data_loader import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
+from qe_macro_calc.simulation import Simulation
+from qe_macro_calc.utils.data_loader import DataLoader
 
 def main():
     # Set up argument parser
@@ -15,49 +14,12 @@ def main():
     data_loader = DataLoader(args.params_dir)
     params = data_loader.params
 
-    # Check for OpenCL platforms
-    platforms = cl.get_platforms()
-    if not platforms:
-        print("No OpenCL platforms found. Exiting.")
-        return
-
-    print("Available OpenCL platforms:")
-    for i, platform in enumerate(platforms):
-        print(f"{i}: {platform.name}")
-
-    # Select the first platform
-    selected_platform = platforms[0]
-    print(f"Selected platform: {selected_platform.name}")
-
-    # Get devices for the selected platform
-    devices = selected_platform.get_devices()
-    if not devices:
-        print("No OpenCL devices found. Exiting.")
-        return
-
-    print("Available devices:")
-    for i, device in enumerate(devices):
-        print(f"{i}: {device.name}")
-
-    # Select the first device
-    selected_device = devices[0]
-    print(f"Selected device: {selected_device.name}")
-
-    # Create an OpenCL context
-    ctx = cl.Context([selected_device])
-    print("OpenCL context created successfully.")
-
-    # Create an OpenCL command queue
-    queue = cl.CommandQueue(ctx)
-
     # Initialize and run the simulation
-    simulation = Simulation(args.params_dir, ctx, queue)
+    simulation = Simulation(args.params_dir)
     state = simulation.run()
 
     # Print final state
     print("Simulation completed successfully.")
-    #print(f"Final Interest Rate: {state[0][-1]:.4f}")
-    #print(f"Final Inflation: {state[2][-1]:.4f}")
 
     # Plotting
     num_rounds = params['num_rounds']
