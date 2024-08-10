@@ -1,5 +1,3 @@
-Certainly! Below is a brief usage and contributing guide for the `QuantStudy` project. This guide will help users understand how to use the project and how contributors can get involved.
-
 ### Usage Guide
 
 #### Installation
