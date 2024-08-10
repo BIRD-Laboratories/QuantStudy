@@ -94,6 +94,10 @@ Please note that this project is released with a [Contributor Code of Conduct](C
 
 Thank you for your interest in contributing to the `QuantStudy` project!
 
+### Utilites
+
+bash.sh is to print out all the python files to a text file to make AI pairprogramming easier. addopencl.sh is intended to be used in programs where OpenCL isn't already installed (such as Google Colab).
+
 ### Disclousures
 
-This project was constructed during pair programming with DeepSeek V2 06-28.
+This project was constructed during pair programming with DeepSeek V2 06-28. Currently code is in very early stages and may not work as correctly or at all.
