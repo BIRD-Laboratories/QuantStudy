@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantStudy Project</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .language-toggle {
+            margin-bottom: 20px;
+        }
+        .language-toggle button {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .language-toggle button:hover {
+            background-color: #0056b3;
+        }
+        .content {
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        h1, h2 {
+            color: #007BFF;
+        }
+        ul, ol {
+            padding-left: 20px;
+        }
+        a {
+            color: #007BFF;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .github-link {
+            display: block;
+            margin-bottom: 20px;
+        }
+        .substack-embed {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="language-toggle">
+            <button onclick="toggleLanguage('en')">English</button>
+            <button onclick="toggleLanguage('zh')">中文</button>
+        </div>
+
+        <div class="content active" id="en">
+            <h1>QuantStudy Project</h1>
+            <p>Welcome to the QuantStudy project! This project aims to simulate economic indicators over time using advanced computational methods.</p>
+            <h2>Features</h2>
+            <ul>
+                <li>Economic simulation based on real-world data</li>
+                <li>Visualization of key economic indicators</li>
+                <li>Easy-to-use interface for running simulations</li>
+            </ul>
+            <h2>Usage</h2>
+            <p>To run the simulation, follow these steps:</p>
+            <ol>
+                <li>Clone the repository.</li>
+                <li>Install the dependencies.</li>
+                <li>Run the main script with the desired parameters.</li>
+            </ol>
+            <h2>Contributing</h2>
+            <p>We welcome contributions from everyone! Please read our contributing guide for more information on how to get started.</p>
+            <a href="https://github.com/BIRD-Laboratories/QuantStudy/" class="github-link">Visit the GitHub Repository</a>
+            <div class="substack-embed">
+                <iframe src="https://open.substack.com/pub/julianherrera/p/quantstudy" width="100%" height="320" style="border:1px solid #EEE; background:white;" frameborder="0" scrolling="no"></iframe>
+            </div>
+        </div>
+
+        <div class="content" id="zh">
+            <h1>QuantStudy 项目</h1>
+            <p>欢迎来到 QuantStudy 项目！该项目旨在使用先进的计算方法模拟经济指标随时间的变化。</p>
+            <h2>特点</h2>
+            <ul>
+                <li>基于真实数据的经济模拟</li>
+                <li>关键经济指标的可视化</li>
+                <li>易于使用的界面来运行模拟</li>
+            </ul>
+            <h2>使用方法</h2>
+            <p>要运行模拟，请按照以下步骤操作：</p>
+            <ol>
+                <li>克隆仓库。</li>
+                <li>安装依赖。</li>
+                <li>使用所需参数运行主脚本。</li>
+            </ol>
+            <h2>贡献</h2>
+            <p>我们欢迎所有人的贡献！请阅读我们的贡献指南，了解更多关于如何开始的信息。</p>
+            <a href="https://github.com/BIRD-Laboratories/QuantStudy/" class="github-link">访问 GitHub 仓库</a>
+            <div class="substack-embed">
+                <iframe src="https://open.substack.com/pub/julianherrera/p/quantstudy" width="100%" height="320" style="border:1px solid #EEE; background:white;" frameborder="0" scrolling="no"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleLanguage(lang) {
+            document.querySelectorAll('.content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(lang).classList.add('active');
+        }
+    </script>
+</body>
+</html>
