@@ -93,3 +93,7 @@ Please note that this project is released with a [Contributor Code of Conduct](C
 - Once approved, your contribution will be merged into the main branch.
 
 Thank you for your interest in contributing to the `QuantStudy` project!
+
+### Disclousures
+
+This project was constructed during pair programming with DeepSeek V2 06-28.
