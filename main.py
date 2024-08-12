@@ -25,7 +25,7 @@ def main():
     num_rounds = params['num_rounds']
     rounds = np.arange(num_rounds)
 
-    plt.figure(figsize=(15, 20))
+    plt.figure(figsize=(30, 40))
 
     # Plot Interest Rate
     plt.subplot(4, 2, 1)
@@ -61,6 +61,13 @@ def main():
     plt.title('Total Bank Money Over Time')
     plt.xlabel('Round')
     plt.ylabel('Total Bank Money')
+
+    # Plot VIX
+    plt.subplot(4, 2, 7)
+    plt.plot(rounds, state[11])
+    plt.title('VIX Over Time')
+    plt.xlabel('Round')
+    plt.ylabel('VIX')
 
     plt.tight_layout()
     plt.savefig("economics.png")

@@ -1,6 +1,6 @@
 {
     "size": 10000,
-    "num_rounds": 100,
+    "num_rounds": 10000,
     "initial_interest_rate":0.9,
     "market_share_limit_fed": 0.1,
     "good_growth_rate": 0.2,

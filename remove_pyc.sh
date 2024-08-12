@@ -6,7 +6,14 @@ remove_pyc_files() {
     find . -type d -name '__pycache__' -exec rmdir {} + 2>/dev/null
 }
 
-# Call the function
-remove_pyc_files
+# Function to remove *.egg.info directories and /build directory
+remove_additional_files() {
+    find . -type d -name '*.egg-info' -exec rm -rf {} +
+    rm -rf ./build
+}
 
-echo "All .pyc files and empty __pycache__ directories have been removed."
+# Call the functions
+remove_pyc_files
+remove_additional_files
+
+echo "All .pyc files, empty __pycache__ directories, *.egg-info directories, and /build directory have been removed."
